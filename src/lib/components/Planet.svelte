@@ -12,6 +12,7 @@
 		Mesh,
 	} from '@babylonjs/core';
 	import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
+	import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
 	import { SceneManager } from '$lib/3d/SceneManager.client';
 
 	export let name: string;
@@ -52,10 +53,12 @@
 				uniforms: [
 					'worldViewProjection','time',
 					'equatorColor','midColor','poleColor',
-					'noiseScale','noiseSpeed','detailMix'
+					'noiseScale','noiseSpeed','detailMix', 'sunPosition'
 				]
 			}
 		);
+
+
 		surfMat.backFaceCulling = false;
 
 		// Set planet-specific uniforms
@@ -65,10 +68,20 @@
 		surfMat.setFloat('noiseScale', noiseScale);
 		surfMat.setFloat('noiseSpeed', noiseSpeed);
 		surfMat.setFloat('detailMix', detailMix);
+		const sun = _scene.getMeshByName('Sun')
+		if(sun) {
+			_scene.onBeforeRenderObservable.add(() => {
+				surfMat.setVector3(('sunPosition'), sun.position)
+			})
+		}
 
 		_mesh = MeshBuilder.CreateSphere(name, { diameter: 2, segments: 64 }, _scene);
 		_mesh.material = surfMat;
 
+		const shadowGen = _scene.getLightByName('SunLight')?.getShadowGenerator();
+		if(shadowGen && shadowGen instanceof ShadowGenerator) {
+			shadowGen.addShadowCaster(_mesh, true);
+		}
 		// Animate planet
 		_obs = _scene.onBeforeRenderObservable.add(() => {
 			const now = performance.now();
@@ -91,14 +104,20 @@
 			);
 			ring.rotation.x = Math.PI / 2;
 			// Use StandardMaterial for guaranteed rendering
-			const ringMat = new StandardMaterial(`${name}-ringMat`, _scene);
-			ringMat.diffuseColor = new Color3(ringColor[0], ringColor[1], ringColor[2]);
-			ringMat.specularColor = Color3.Black();
-			ringMat.emissiveColor = new Color3(ringColor[0], ringColor[1], ringColor[2]);
-			ringMat.alpha = 0.6;
+			const ringMat = new ShaderMaterial(`${name}-ringMat`, _scene, '/Shaders/ring', {
+				attributes: ['position', 'uv'],
+				uniforms: ['worldViewProjection', 'color', 'outerRadius', 'innerRadius', 'sunPosition']
+			});
+			ringMat.setVector3('color', { x: ringColor[0], y: ringColor[1], z: ringColor[2] });
+			ringMat.setFloat('outerRadius', ringOuter);
+			ringMat.setFloat('innerRadius', ringInner);
+			if (sun) {
+				_scene.onBeforeRenderObservable.add(() => {
+					ringMat.setVector3('sunPosition', sun.position);
+				});
+			}
 			ring.material = ringMat;
 			ring.parent = _mesh;
-			ring.isPickable = false;
 		}
 
 		// Atmosphere

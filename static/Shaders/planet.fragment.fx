@@ -1,9 +1,11 @@
-// src/lib/babylon/shaders/planet.fragment.fx
 #ifdef GL_ES
 precision highp float;
 #endif
 
+
+
 // Varyings
+varying vec3 vWorldPos; // <-- Fixed type
 varying vec3 vNormal;
 varying vec2 vUV;
 varying float vTime;
@@ -39,12 +41,14 @@ float fbm(vec2 p) {
 }
 
 // Uniforms for per-planet appearance
+uniform vec3 sunPosition;
 uniform vec3 equatorColor;
 uniform vec3 midColor;
 uniform vec3 poleColor;
 uniform float noiseScale;
 uniform float noiseSpeed;
 uniform float detailMix;
+
 
 void main() {
   // Base color zones via uv.y (latitude)
@@ -60,7 +64,8 @@ void main() {
   vec3 color = mix(base * 0.8, base * 1.2, detail);
 
   // Simple lighting: lambert
-  float light = dot(normalize(vNormal), normalize(vec3(0.5,0.8,0.3))) * 0.5 + 0.5;
+  vec3 lightDir = normalize(sunPosition - vWorldPos);
+  float light = dot(normalize(vNormal), lightDir) * 0.5 + 0.5;
   color *= light;
 
   gl_FragColor = vec4(color, 1.0);

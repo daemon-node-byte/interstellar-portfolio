@@ -72,11 +72,11 @@ export class SceneManager {
 
         const sunSphere = MeshBuilder.CreateSphere('Sun', { diameter: 4 }, this.scene);
         const sunLight = new PointLight('SunLight', Vector3.Zero(), this.scene);
-        sunLight.intensity = 2;
-        new HemisphericLight('AmbientLight', new Vector3(0, 1, 0), this.scene);
+        sunLight.intensity = 200;
+        new HemisphericLight('AmbientLight', new Vector3(0, 0, 0), this.scene);
 
         const sunMaterial = new StandardMaterial('SunMaterial', this.scene);
-        sunMaterial.emissiveColor = new Color3(1, 0.7, 0.2);
+        sunMaterial.emissiveColor = new Color3(100, 7.0, 2.0);
         sunSphere.material = sunMaterial;
 
         this.glowLayer = new GlowLayer('GlowLayer', this.scene);
@@ -214,7 +214,13 @@ export class SceneManager {
         const starfieldMat = new ShaderMaterial(
             'starfieldMat',
             this.scene,
-            '/Shaders/starfield'
+            // Inline shader code for brevity; in production, use external .fx files
+            '/Shaders/starfield',
+            {
+                attributes: ['position', 'uv'],
+                uniforms: ['worldViewProjection', 'time'],
+                needAlphaBlending: false,
+            }
         );
         starfieldMat.backFaceCulling = false;
         starfieldSphere.material = starfieldMat;
