@@ -6,7 +6,7 @@ import devtoolsJson from 'vite-plugin-devtools-json';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit(), glsl(), devtoolsJson()],
+	plugins: [tailwindcss(), sveltekit(), glsl({ include: '**/*.fx'}), devtoolsJson()],
 	test: {
 		projects: [
 			{

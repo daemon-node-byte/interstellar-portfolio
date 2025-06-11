@@ -9,8 +9,14 @@ import {
     Animation,
     EasingFunction,
     CubicEase,
+    GlowLayer,
+    StandardMaterial,
+    Color3,
     type Nullable,
     Observer,
+    ShaderMaterial,
+    Texture,
+    Mesh,
 } from '@babylonjs/core';
 
 export type BeforeRenderCallback = (scene: Scene) => void;
@@ -27,6 +33,8 @@ export class SceneManager {
     private defaultCameraTarget = Vector3.Zero(); // Default camera target
     private defaultCameraRadius = 40; // Default camera radius
     private followObserver: Nullable<Observer<Scene>> = null;
+    private glowLayer!: GlowLayer; // Add a GlowLayer property
+    private plasmaMat!: ShaderMaterial;
 
     private constructor() {
         this.ready = new Promise((resolve) => {
@@ -68,19 +76,52 @@ export class SceneManager {
 
         // 3) Lighting: a point‐light “sun” + ambient
         const sunSphere = MeshBuilder.CreateSphere('Sun', { diameter: 4 }, this.scene);
-        // (You would later apply an emissive shader to this mesh)
 
         const sunLight = new PointLight('SunLight', Vector3.Zero(), this.scene);
         sunLight.intensity = 2;
 
         new HemisphericLight('AmbientLight', new Vector3(0, 1, 0), this.scene);
 
-        // 4) Render loop
+        // 4) Apply emissive material to the sun
+        const sunMaterial = new StandardMaterial('SunMaterial', this.scene);
+        sunMaterial.emissiveColor = new Color3(1, 0.7, 0.2); // Bright orange glow
+        sunSphere.material = sunMaterial;
+
+        // 5) Add a GlowLayer for the sun
+        this.glowLayer = new GlowLayer('GlowLayer', this.scene);
+        this.glowLayer.intensity = 1.5;
+        this.glowLayer.referenceMeshToUseItsOwnMaterial(sunSphere);
+
+        // --- SOLAR PLASMA (animated corona shell) ---
+        // Create a slightly larger transparent sphere with a custom ShaderMaterial
+        const plasmaSphere = MeshBuilder.CreateSphere('sunPlasma', { diameter: 5.2, segments: 32 }, this.scene);
+        this.plasmaMat = new ShaderMaterial(
+            'plasmaMat',
+            this.scene,
+            // Use a path relative to the public root (no leading slash)
+            '/Shaders/solarPlasma',
+            {
+                attributes: ['position', 'uv'],
+                uniforms: ['worldViewProjection', 'time'],
+                needAlphaBlending: true,
+            }
+        );
+        this.plasmaMat.alpha = 0.8;
+        this.plasmaMat.backFaceCulling = false;
+        plasmaSphere.material = this.plasmaMat;
+        plasmaSphere.parent = sunSphere; // keep plasma centered on sun
+
+        // Animate the plasma shader's time uniform
+        this.scene.onBeforeRenderObservable.add(() => {
+            this.plasmaMat.setFloat('time', performance.now() * 0.001);
+        });
+
+        // 6) Render loop
         this.engine.runRenderLoop(() => {
             this.scene.render();
         });
 
-        // 5) Handle resize
+        // 7) Handle resize
         window.addEventListener('resize', () => this.engine.resize());
 
         // Resolve the ready promise
