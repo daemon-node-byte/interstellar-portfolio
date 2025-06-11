@@ -1,3 +1,19 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+@theme {
+    --font-mono: '"Share Tech Mono"', 'monospace';
+    --color-neon-cyan: #00ffe7;
+    --color-cyber-purple: #a200ff;
+    --text-glow: rgba(0, 255, 231, 0.7);
+}
+/*
+@layer components {
+    .neon-glow {
+        text-shadow: 0 0 8px var(--tw-text-opacity) var(--tw-text-color),
+        0 0 16px var(--tw-text-opacity) var(--tw-text-color);
+    }
+}
+
+ */

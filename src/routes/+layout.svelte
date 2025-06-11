@@ -1,30 +1,33 @@
 <script lang="ts">
+	import '../app.css';
+	import { onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 
-    import HUD from '$lib/components/HUD.svelte';
-    import SolarSystem from '$lib/components/SolarSystem.svelte';
+	import SceneCanvas from '$lib/components/SceneCanvas.svelte';
+	import HUD from '$lib/components/HUD.svelte';
+	import { selectedPlanet } from '$lib/store';
+	import { SceneManager } from '$lib/3d/SceneManager.client';
 
-    let selectedPlanet: string | null = null;
-    let { children } = $props();
-    const handlePlanetSelect = (planet: string) => {
-        selectedPlanet = planet;
-    };
+	let { children } = $props();
+
+	// Subscribe to store changes
+	const unsubscribe = selectedPlanet.subscribe((planetName) => {
+		if (planetName) {
+			// 1) zoom in on the selected planet
+			SceneManager.instance.zoomTo(planetName);
+
+			// 2) update the URL (/about, /projects, etc.)
+			goto(`/${planetName}`);
+		}
+	});
+
+	onDestroy(unsubscribe);
 </script>
 
-<div class="absolute inset-0 z-0">
-    <SolarSystem on:selectPlanet={(e) => handlePlanetSelect(e.detail)} {selectedPlanet} />
-</div>
+<!-- 3D canvas -->
+<SceneCanvas />
 
-<div class="absolute inset-0 z-10 pointer-events-none">
-    <HUD {selectedPlanet} />
-</div>
-
-<!-- Render child routes/pages -->
-{@render children()}
-
-<style>
-    :global(body) {
-        margin: 0;
-        overflow: hidden;
-        background: black;
-    }
-</style>
+<!-- HUD overlay + routed page content -->
+<HUD>
+	{@render children()}
+</HUD>
