@@ -12,10 +12,10 @@ import {
     GlowLayer,
     StandardMaterial,
     Color3,
+    Color4,
     type Nullable,
     Observer,
     ShaderMaterial,
-    Texture,
     Mesh,
 } from '@babylonjs/core';
 
@@ -27,111 +27,88 @@ export class SceneManager {
     public scene!: Scene;
     public mainCamera!: ArcRotateCamera;
     private _beforeRenderObserver: Nullable<Observer<Scene>> = null;
-    public ready: Promise<void>; // Promise to indicate readiness
+    public ready: Promise<void>;
     private _resolveReady!: () => void;
 
-    private defaultCameraTarget = Vector3.Zero(); // Default camera target
-    private defaultCameraRadius = 40; // Default camera radius
+    private readonly defaultCameraTarget = Vector3.Zero();
+    private readonly defaultCameraRadius = 40;
     private followObserver: Nullable<Observer<Scene>> = null;
-    private glowLayer!: GlowLayer; // Add a GlowLayer property
+    private glowLayer!: GlowLayer;
     private plasmaMat!: ShaderMaterial;
 
     private constructor() {
-        this.ready = new Promise((resolve) => {
-            this._resolveReady = resolve;
-        });
+        this.ready = new Promise(resolve => { this._resolveReady = resolve; });
     }
 
     public static get instance(): SceneManager {
-        if (!this._instance) {
-            this._instance = new SceneManager();
-        }
-        return this._instance;
+        return this._instance ??= new SceneManager();
     }
 
-    /**
-     * Initialize BabylonJS with our canvas, camera, lights, and render loop.
-     */
     public init(canvas: HTMLCanvasElement): void {
         if (typeof window === 'undefined' || !canvas) {
             console.error('SceneManager.init: Canvas is not available or running in a non-browser environment.');
-            return; // Ensure this runs only in the browser and with a valid canvas
+            return;
         }
 
-        // 1) Create engine and scene
         this.engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: true });
         this.scene = new Scene(this.engine);
 
-        // 2) Main orbit camera
+        // Set a dark background color
+        this.scene.clearColor = new Color4(0.02, 0.02, 0.07, 1);
+
+        // Starfield generation
+        this._createStarfield();
+
         this.mainCamera = new ArcRotateCamera(
           'MainCamera',
           Math.PI / 2,
           Math.PI / 2.5,
-          40,
-          Vector3.Zero(),
+          this.defaultCameraRadius,
+          this.defaultCameraTarget,
           this.scene
         );
         this.mainCamera.attachControl(canvas, true);
         this.mainCamera.wheelDeltaPercentage = 0.01;
 
-        // 3) Lighting: a point‐light “sun” + ambient
         const sunSphere = MeshBuilder.CreateSphere('Sun', { diameter: 4 }, this.scene);
-
         const sunLight = new PointLight('SunLight', Vector3.Zero(), this.scene);
         sunLight.intensity = 2;
-
         new HemisphericLight('AmbientLight', new Vector3(0, 1, 0), this.scene);
 
-        // 4) Apply emissive material to the sun
         const sunMaterial = new StandardMaterial('SunMaterial', this.scene);
-        sunMaterial.emissiveColor = new Color3(1, 0.7, 0.2); // Bright orange glow
+        sunMaterial.emissiveColor = new Color3(1, 0.7, 0.2);
         sunSphere.material = sunMaterial;
 
-        // 5) Add a GlowLayer for the sun
         this.glowLayer = new GlowLayer('GlowLayer', this.scene);
         this.glowLayer.intensity = 1.5;
         this.glowLayer.referenceMeshToUseItsOwnMaterial(sunSphere);
 
-        // --- SOLAR PLASMA (animated corona shell) ---
-        // Create a slightly larger transparent sphere with a custom ShaderMaterial
         const plasmaSphere = MeshBuilder.CreateSphere('sunPlasma', { diameter: 5.2, segments: 32 }, this.scene);
         this.plasmaMat = new ShaderMaterial(
-            'plasmaMat',
-            this.scene,
-            // Use a path relative to the public root (no leading slash)
-            '/Shaders/solarPlasma',
-            {
-                attributes: ['position', 'uv'],
-                uniforms: ['worldViewProjection', 'time'],
-                needAlphaBlending: true,
-            }
+          'plasmaMat',
+          this.scene,
+          '/Shaders/solarPlasma',
+          {
+              attributes: ['position', 'uv'],
+              uniforms: ['worldViewProjection', 'time'],
+              needAlphaBlending: true,
+          }
         );
         this.plasmaMat.alpha = 0.8;
         this.plasmaMat.backFaceCulling = false;
         plasmaSphere.material = this.plasmaMat;
-        plasmaSphere.parent = sunSphere; // keep plasma centered on sun
+        plasmaSphere.parent = sunSphere;
 
-        // Animate the plasma shader's time uniform
         this.scene.onBeforeRenderObservable.add(() => {
             this.plasmaMat.setFloat('time', performance.now() * 0.001);
         });
 
-        // 6) Render loop
-        this.engine.runRenderLoop(() => {
-            this.scene.render();
-        });
-
-        // 7) Handle resize
+        this.engine.runRenderLoop(() => this.scene.render());
         window.addEventListener('resize', () => this.engine.resize());
 
-        // Resolve the ready promise
         this._resolveReady();
     }
 
-    /**
-     * Registers a callback that's called on every frame, before render.
-     * Useful for animating planets, rings, etc.
-     */
     public registerBeforeRender(fn: BeforeRenderCallback): void {
         if (this._beforeRenderObserver) {
             this.scene.onBeforeRenderObservable.remove(this._beforeRenderObserver);
@@ -139,27 +116,59 @@ export class SceneManager {
         this._beforeRenderObserver = this.scene.onBeforeRenderObservable.add(() => fn(this.scene));
     }
 
-    /**
-     * Smoothly animates camera.target and radius to focus on a mesh.
-     * @param meshName The name of the mesh to zoom into.
-     * @param durationMs Animation duration in milliseconds (default 800ms)
-     */
     public zoomTo(meshName: string, durationMs = 800): void {
         if (!this.scene || !this.mainCamera) {
             console.error('SceneManager.zoomTo: Scene or camera is not initialized.');
             return;
         }
-
         const mesh = this.scene.getMeshByName(meshName);
         if (!mesh) {
             console.warn(`SceneManager.zoomTo: no mesh named "${meshName}"`);
             return;
         }
 
-        // Animate camera target
-        const fromTarget = this.mainCamera.target.clone();
         const toTarget = mesh.getAbsolutePosition();
+        const toRadius = mesh.getBoundingInfo().boundingSphere.radius * 4;
 
+        this.animateCamera(this.mainCamera.target.clone(), toTarget, this.mainCamera.radius, toRadius);
+    }
+
+    public followPlanet(meshName: string): void {
+        if (!this.scene || !this.mainCamera) {
+            console.error('SceneManager.followPlanet: Scene or camera is not initialized.');
+            return;
+        }
+        const mesh = this.scene.getMeshByName(meshName);
+        if (!mesh) {
+            console.warn(`SceneManager.followPlanet: No mesh named "${meshName}"`);
+            return;
+        }
+        if (this.followObserver) {
+            this.scene.onBeforeRenderObservable.remove(this.followObserver);
+        }
+        this.followObserver = this.scene.onBeforeRenderObservable.add(() => {
+            this.mainCamera.target = mesh.getAbsolutePosition();
+        });
+    }
+
+    public resetCamera(): void {
+        if (!this.scene || !this.mainCamera) {
+            console.error('SceneManager.resetCamera: Scene or camera is not initialized.');
+            return;
+        }
+        if (this.followObserver) {
+            this.scene.onBeforeRenderObservable.remove(this.followObserver);
+            this.followObserver = null;
+        }
+        this.animateCamera(
+          this.mainCamera.target.clone(),
+          this.defaultCameraTarget,
+          this.mainCamera.radius,
+          this.defaultCameraRadius
+        );
+    }
+
+    private animateCamera(fromTarget: Vector3, toTarget: Vector3, fromRadius: number, toRadius: number): void {
         const targetAnim = new Animation(
           'cameraTargetAnim',
           'target',
@@ -171,10 +180,6 @@ export class SceneManager {
             { frame: 0, value: fromTarget },
             { frame: 100, value: toTarget },
         ]);
-
-        // Animate radius
-        const fromRadius = this.mainCamera.radius;
-        const toRadius = mesh.getBoundingInfo().boundingSphere.radius * 4;
 
         const radiusAnim = new Animation(
           'cameraRadiusAnim',
@@ -188,85 +193,6 @@ export class SceneManager {
             { frame: 100, value: toRadius },
         ]);
 
-        // Easing
-        const ease = new CubicEase();
-        ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
-        targetAnim.setEasingFunction(ease);
-        radiusAnim.setEasingFunction(ease);
-
-        // Apply animations
-        this.mainCamera.animations = [targetAnim, radiusAnim];
-        this.scene.beginAnimation(this.mainCamera, 0, 100, false, 1);
-    }
-
-    /**
-     * Follow a planet by its mesh name.
-     * @param meshName The name of the mesh to follow.
-     */
-    public followPlanet(meshName: string): void {
-        if (!this.scene || !this.mainCamera) {
-            console.error('SceneManager.followPlanet: Scene or camera is not initialized.');
-            return;
-        }
-
-        const mesh = this.scene.getMeshByName(meshName);
-        if (!mesh) {
-            console.warn(`SceneManager.followPlanet: No mesh named "${meshName}"`);
-            return;
-        }
-
-        // Remove any existing follow observer
-        if (this.followObserver) {
-            this.scene.onBeforeRenderObservable.remove(this.followObserver);
-        }
-
-        // Add an observer to follow the planet
-        this.followObserver = this.scene.onBeforeRenderObservable.add(() => {
-            const planetPosition = mesh.getAbsolutePosition();
-            this.mainCamera.target = planetPosition;
-        });
-    }
-
-    /**
-     * Reset the camera to its default position.
-     */
-    public resetCamera(): void {
-        if (!this.scene || !this.mainCamera) {
-            console.error('SceneManager.resetCamera: Scene or camera is not initialized.');
-            return;
-        }
-
-        // Remove the follow observer
-        if (this.followObserver) {
-            this.scene.onBeforeRenderObservable.remove(this.followObserver);
-            this.followObserver = null;
-        }
-
-        // Smoothly animate the camera back to the default position
-        const targetAnim = new Animation(
-            'resetCameraTargetAnim',
-            'target',
-            60,
-            Animation.ANIMATIONTYPE_VECTOR3,
-            Animation.ANIMATIONLOOPMODE_CONSTANT
-        );
-        targetAnim.setKeys([
-            { frame: 0, value: this.mainCamera.target.clone() },
-            { frame: 100, value: this.defaultCameraTarget },
-        ]);
-
-        const radiusAnim = new Animation(
-            'resetCameraRadiusAnim',
-            'radius',
-            60,
-            Animation.ANIMATIONTYPE_FLOAT,
-            Animation.ANIMATIONLOOPMODE_CONSTANT
-        );
-        radiusAnim.setKeys([
-            { frame: 0, value: this.mainCamera.radius },
-            { frame: 100, value: this.defaultCameraRadius },
-        ]);
-
         const ease = new CubicEase();
         ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
         targetAnim.setEasingFunction(ease);
@@ -277,11 +203,26 @@ export class SceneManager {
     }
 
     /**
-     * Dispose of the engine & scene (call on unmount or full teardown).
+     * Creates a distant starfield using a large inverted sphere and a procedural shader.
      */
+    private _createStarfield(): void {
+        const starfieldSphere = MeshBuilder.CreateSphere('Starfield', { diameter: 400, segments: 32 }, this.scene);
+        starfieldSphere.infiniteDistance = true;
+        starfieldSphere.isPickable = false;
+
+        // Simple procedural starfield shader
+        const starfieldMat = new ShaderMaterial(
+            'starfieldMat',
+            this.scene,
+            '/Shaders/starfield'
+        );
+        starfieldMat.backFaceCulling = false;
+        starfieldSphere.material = starfieldMat;
+        starfieldSphere.renderingGroupId = 0;
+    }
+
     public dispose(): void {
-        if (typeof window === 'undefined') return; // Ensure this runs only in the browser
-
+        if (typeof window === 'undefined') return;
         window.removeEventListener('resize', () => this.engine.resize());
         this.scene.dispose();
         this.engine.dispose();
