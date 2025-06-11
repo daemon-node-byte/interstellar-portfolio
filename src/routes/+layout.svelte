@@ -1,11 +1,10 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { page } from '$app/stores';
+
     import HUD from '$lib/components/HUD.svelte';
     import SolarSystem from '$lib/components/SolarSystem.svelte';
 
     let selectedPlanet: string | null = null;
-
+    let { children } = $props();
     const handlePlanetSelect = (planet: string) => {
         selectedPlanet = planet;
     };
@@ -20,7 +19,7 @@
 </div>
 
 <!-- Render child routes/pages -->
-<slot />
+{@render children()}
 
 <style>
     :global(body) {

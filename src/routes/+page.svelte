@@ -1,2 +1,6 @@
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://svelte.dev/docs/kit">svelte.dev/docs/kit</a> to read the documentation</p>
+<script lang="ts">
+    console.info(
+        `%cWelcome to the Intergalactic Software Engineer's Portfolio!`,
+        'color: #00ff00; font-size: 20px; font-family: monospace;'
+    );
+</script>
