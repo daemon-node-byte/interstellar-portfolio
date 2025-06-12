@@ -72,7 +72,7 @@ onDestroy(() => {
   window.removeEventListener('keydown', handleKeydown);
 });
 
-function onSelect(event) {
+function onSelect(event: CustomEvent<{ name: string }>) {
   selectedPlanetName = event.detail.name;
   SceneManager.instance.followPlanet(selectedPlanetName);
   selectedPlanet.set(selectedPlanetName);
