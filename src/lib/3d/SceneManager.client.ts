@@ -80,6 +80,10 @@ export class SceneManager {
         this.animateCamera(this.mainCamera.target.clone(), toTarget, this.mainCamera.radius, toRadius);
     }
 
+    private getSunPosition(): Vector3 {
+        return this.scene.getMeshByName('Sun')?.getAbsolutePosition() ?? Vector3.Zero();
+    }
+
     public followPlanet(meshName: string): void {
         if (!this.scene || !this.mainCamera) return;
         const mesh = this.scene.getMeshByName(meshName);
@@ -87,9 +91,18 @@ export class SceneManager {
         if (this.followObserver) {
             this.scene.onBeforeRenderObservable.remove(this.followObserver);
         }
+        // Always update camera target to follow the planet
         this.followObserver = this.scene.onBeforeRenderObservable.add(() => {
             this.mainCamera.target = mesh.getAbsolutePosition();
         });
+        // Optionally, zoom to the planet as well
+        const toRadius = mesh.getBoundingInfo().boundingSphere.radius * 4;
+        this.animateCamera(
+            this.mainCamera.target.clone(),
+            mesh.getAbsolutePosition(),
+            this.mainCamera.radius,
+            toRadius
+        );
     }
 
     public resetCamera(): void {
@@ -98,12 +111,16 @@ export class SceneManager {
             this.scene.onBeforeRenderObservable.remove(this.followObserver);
             this.followObserver = null;
         }
+        // Focus camera on the Sun
+        const sunPos = this.getSunPosition();
         this.animateCamera(
             this.mainCamera.target.clone(),
-            this.defaultCameraTarget,
+            sunPos,
             this.mainCamera.radius,
             this.defaultCameraRadius
         );
+        // Also set camera target immediately to Sun to avoid lag
+        this.mainCamera.target = sunPos.clone();
     }
 
     private animateCamera(fromTarget: Vector3, toTarget: Vector3, fromRadius: number, toRadius: number): void {
