@@ -20,6 +20,6 @@ void main() {
   vNormal = normalize(normal);
   vUV     = uv;
   vTime   = time;
-  vWorldPos = (world * vec4(position, 1.0)).xyz; // <-- Added missing semicolon
+  vWorldPos = (world * vec4(position, 1.0)).xyz; // <-- Added
   gl_Position = worldViewProjection * vec4(position, 1.0);
 }

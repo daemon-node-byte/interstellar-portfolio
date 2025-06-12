@@ -49,6 +49,12 @@ uniform float noiseScale;
 uniform float noiseSpeed;
 uniform float detailMix;
 
+// Shadow uniforms
+uniform sampler2D shadowMap;
+uniform mat4 lightMatrix;
+uniform sampler2D ringShadowMap;
+uniform mat4 ringLightMatrix;
+
 
 void main() {
   // Base color zones via uv.y (latitude)
@@ -66,7 +72,32 @@ void main() {
   // Simple lighting: lambert
   vec3 lightDir = normalize(sunPosition - vWorldPos);
   float light = dot(normalize(vNormal), lightDir) * 0.5 + 0.5;
-  color *= light;
+
+  // --- Planet shadow ---
+  vec4 shadowCoord = lightMatrix * vec4(vWorldPos, 1.0);
+  shadowCoord.xyz /= shadowCoord.w;
+  float shadow = 1.0;
+  if (shadowCoord.x >= 0.0 && shadowCoord.x <= 1.0 &&
+      shadowCoord.y >= 0.0 && shadowCoord.y <= 1.0 &&
+      shadowCoord.z >= 0.0 && shadowCoord.z <= 1.0) {
+    float shadowDepth = texture2D(shadowMap, shadowCoord.xy).r;
+    float currentDepth = shadowCoord.z - 0.005;
+    shadow = currentDepth > shadowDepth ? 0.5 : 1.0;
+  }
+
+  // --- Ring shadow ---
+  float ringShadow = 1.0;
+  vec4 ringShadowCoord = ringLightMatrix * vec4(vWorldPos, 1.0);
+  ringShadowCoord.xyz /= ringShadowCoord.w;
+  if (ringShadowCoord.x >= 0.0 && ringShadowCoord.x <= 1.0 &&
+      ringShadowCoord.y >= 0.0 && ringShadowCoord.y <= 1.0 &&
+      ringShadowCoord.z >= 0.0 && ringShadowCoord.z <= 1.0) {
+    float ringShadowDepth = texture2D(ringShadowMap, ringShadowCoord.xy).r;
+    float ringCurrentDepth = ringShadowCoord.z - 0.005;
+    ringShadow = ringCurrentDepth > ringShadowDepth ? 0.5 : 1.0;
+  }
+
+  color *= light * shadow * ringShadow;
 
   gl_FragColor = vec4(color, 1.0);
 }
