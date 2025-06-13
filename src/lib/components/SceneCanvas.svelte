@@ -92,11 +92,11 @@ onMount(async () => {
 	SceneManager.instance.init(canvasEl);
 	await SceneManager.instance.ready;
 	isSceneReady = true;
-	if (typeof window === 'undefined' || !canvasEl) return;
-	const {Inspector} = await import('@babylonjs/inspector');
-		if (SceneManager.instance.scene) {
-			Inspector.Show(SceneManager.instance.scene, { showExplorer: true, showInspector: true, overlay: true, });
-		}
+	// if (typeof window === 'undefined' || !canvasEl) return;
+	// const {Inspector} = await import('@babylonjs/inspector');
+	// 	if (SceneManager.instance.scene) {
+	// 		Inspector.Show(SceneManager.instance.scene, { showExplorer: true, showInspector: true, overlay: true, });
+	// 	}
 });
 
 onDestroy(() => {

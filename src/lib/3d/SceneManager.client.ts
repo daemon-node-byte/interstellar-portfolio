@@ -169,5 +169,10 @@ export class SceneManager {
         this.scene.dispose();
         this.engine.dispose();
     }
- 
+    /**
+     * Returns a promise that resolves when the scene is ready.
+     */
+    public async waitUntilReady(): Promise<void> {
+        await this.ready;
+    }
 }

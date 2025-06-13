@@ -53,6 +53,7 @@
 	},
 	"dependencies": {
 		"@babylonjs/core": "^8.11.0",
+		"@babylonjs/loaders": "^8.12.1",
 		"inspector": "link:@@babylonjs/inspector"
 	}
 }
