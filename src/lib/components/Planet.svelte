@@ -12,6 +12,7 @@
     DirectionalLight,
     Vector3,
     Matrix,
+    Quaternion
   } from '@babylonjs/core';
   import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
   import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
@@ -37,17 +38,18 @@
   export let noiseScale = 5.0;
   export let noiseSpeed = 0.05;
   export let detailMix = 0.5;
+  export let moonOrbitAxes: Array<[number, number, number]> = [];
 
   const dispatch = createEventDispatcher();
-  let _scene: Scene;
-  let _mesh: Mesh;
+  let _scene: Scene, _mesh: Mesh, ring: Mesh;
   const moons: Mesh[] = [];
-  let ring: Mesh;
-  let ringShadowGen: ShadowGenerator;
-  let ringDirLight: DirectionalLight;
-
-  // Track all observers for cleanup
   let _observers: Observer<Scene>[] = [];
+
+  // Helper to generate a pseudo-random value per moon (deterministic per planet)
+  function moonRand(seed: number) {
+    // Simple LCG for deterministic pseudo-random
+    return Math.sin(seed * 999 + name.length * 17) * 10000 % 1;
+  }
 
   onMount(async () => {
     if (typeof window === 'undefined') return;
@@ -56,6 +58,7 @@
 
     // Create planet mesh and shader material
     _mesh = MeshBuilder.CreateSphere(name, { diameter: planetSize, segments: 64 }, _scene);
+    const sunShadowGen = SceneManager.instance.getSunShadowGenerator();
     const surfMat = new ShaderMaterial(
       `${name}-surfMat`, _scene, '/Shaders/planet',
       {
@@ -77,76 +80,33 @@
     surfMat.setFloat('detailMix', detailMix);
     _mesh.material = surfMat;
 
-    // Sun position uniform
-    const sun = _scene.getMeshByName('Sun');
-    if (sun) {
-      const obs = _scene.onBeforeRenderObservable.add(() => {
-        surfMat.setVector3('sunPosition', sun.position);
-      });
-      _observers.push(obs);
+    if (sunShadowGen) {
+      sunShadowGen.addShadowCaster(_mesh, true);
+      _mesh.receiveShadows = true;
+      const shadowMap = sunShadowGen.getShadowMap();
+      if (shadowMap) surfMat.setTexture('shadowMap', shadowMap);
+      surfMat.setMatrix('lightMatrix', sunShadowGen.getTransformMatrix());
     }
 
-    // Animate planet
-    const planetObs = _scene.onBeforeRenderObservable.add(() => {
+    _observers.push(_scene.onBeforeRenderObservable.add(() => {
       const now = performance.now();
       surfMat.setFloat('time', now * 0.001);
       const t = now * 0.0001 * speed;
       _mesh.position.x = Math.cos(t) * orbitRadius;
       _mesh.position.z = Math.sin(t) * orbitRadius;
-
-      // --- Directional light and shadow for this planet ---
-      // Create or update the directional light for this planet
-      SceneManager.instance.createPlanetLight(name, _mesh.position);
-
-      // Pass shadow map and light matrix to shader
-      const shadowGen = SceneManager.instance.getPlanetShadowGen(name);
-      if (shadowGen) {
-        const shadowMap = shadowGen.getShadowMap();
-        if (shadowMap) {
-          surfMat.setTexture('shadowMap', shadowMap);
-        }
-        surfMat.setMatrix('lightMatrix', shadowGen.getTransformMatrix());
-        shadowGen.addShadowCaster(_mesh, true);
-        _mesh.receiveShadows = true;
-      }
-      // Pass world matrix for shadow mapping
       surfMat.setMatrix('world', _mesh.getWorldMatrix());
+    }));
 
-      // --- Ring shadow logic ---
-      if (hasRing && ring && sun) {
-        // Update ring directional light direction
-        const sunToRing = ring.getAbsolutePosition().subtract(sun.position).normalize();
-        if (ringDirLight) {
-          ringDirLight.direction = sunToRing;
-          ringDirLight.position = sun.position.clone();
-        }
-        // Update shadow generator
-        if (ringShadowGen) {
-          ringShadowGen.addShadowCaster(ring, true);
-          _mesh.receiveShadows = true;
-
-          // Pass ring shadow map and matrix to planet shader if needed
-          const ringShadowMap = ringShadowGen.getShadowMap();
-          if (ringShadowMap) {
-            surfMat.setTexture('ringShadowMap', ringShadowMap);
-          }
-          surfMat.setMatrix('ringLightMatrix', ringShadowGen.getTransformMatrix());
-        }
-      }
-    });
-    _observers.push(planetObs);
-
-    // Ring
     if (hasRing) {
       ring = MeshBuilder.CreateTorus(
         `${name}-ring`,
-        {
-          diameter: planetSize + ringDiameter,
-          thickness: ringThickness,
-          tessellation: 64
-        },
+        { diameter: planetSize + ringDiameter, thickness: ringThickness, tessellation: 64 },
         _scene
       );
+      if (sunShadowGen) {
+        sunShadowGen.addShadowCaster(ring, true);
+        ring.receiveShadows = true;
+      }
       ring.rotation.x = ringRotation[0];
       ring.rotation.y = ringRotation[1];
       ring.rotation.z = ringRotation[2];
@@ -160,37 +120,15 @@
       ringMat.setVector3('color', { x: ringColor[0], y: ringColor[1], z: ringColor[2] });
       ringMat.setFloat('outerRadius', ringOuter);
       ringMat.setFloat('innerRadius', ringInner);
-      if (sun) {
-        const obs = _scene.onBeforeRenderObservable.add(() => {
-          ringMat.setVector3('sunPosition', sun.position);
-        });
-        _observers.push(obs);
-      }
       ring.material = ringMat;
       ring.parent = _mesh;
-
-      // --- Ring directional light and shadow ---
-      if (sun) {
-        // Create a directional light from sun to ring
-        const sunToRing = ring.getAbsolutePosition().subtract(sun.position).normalize();
-        ringDirLight = new DirectionalLight(`${name}-ringDirLight`, sunToRing, _scene);
-        ringDirLight.position = sun.position.clone();
-        ringDirLight.intensity = 2.0;
-        ringShadowGen = new ShadowGenerator(1024, ringDirLight);
-        ringShadowGen.useExponentialShadowMap = true;
-        ringShadowGen.bias = 0.0005;
-        ringShadowGen.addShadowCaster(ring, true);
-        _mesh.receiveShadows = true;
-        // Pass shadow map and matrix to ring shader
-        const ringShadowMap = ringShadowGen.getShadowMap();
-        if (ringShadowMap) {
-          ringMat.setTexture('shadowMap', ringShadowMap);
-        }
-        ringMat.setMatrix('lightMatrix', ringShadowGen.getTransformMatrix());
+      if (sunShadowGen) {
+        const shadowMap = sunShadowGen.getShadowMap();
+        if (shadowMap) ringMat.setTexture('shadowMap', shadowMap);
+        ringMat.setMatrix('lightMatrix', sunShadowGen.getTransformMatrix());
       }
     }
 
-    // Atmosphere
     if (atmosphere) {
       const atmoSphere = MeshBuilder.CreateSphere(
         `${name}-atmo`, { diameter: planetSize + 0.15, segments: 32 }, _scene
@@ -203,18 +141,20 @@
       atmoMat.alpha = 0.5;
       atmoSphere.material = atmoMat;
       atmoSphere.parent = _mesh;
-      const obs = _scene.onBeforeRenderObservable.add(() => {
+      _observers.push(_scene.onBeforeRenderObservable.add(() => {
         atmoMat.setVector3('cameraPosition', _scene.activeCamera!.position);
-      });
-      _observers.push(obs);
+      }));
       atmoMat.setVector3('atmoColor', { x: atmoColor[0], y: atmoColor[1], z: atmoColor[2] });
       atmoMat.setFloat('coef', 0.1);
       atmoMat.setFloat('power', 2.0);
     }
 
-    // Moons
     for (let i = 0; i < moonCount; i++) {
       const m = MeshBuilder.CreateSphere(`${name}-moon-${i}`, { diameter: 0.4 }, _scene);
+      if (sunShadowGen) {
+        sunShadowGen.addShadowCaster(m, true);
+        m.receiveShadows = true;
+      }
       const mat = new StandardMaterial(`${name}-moonMat-${i}`, _scene);
       mat.diffuseColor = new Color3(0.8, 0.8, 0.8);
       m.material = mat;
@@ -222,34 +162,39 @@
       moons.push(m);
     }
     if (moonCount > 0) {
-      const obs = _scene.onBeforeRenderObservable.add(() => {
+      _observers.push(_scene.onBeforeRenderObservable.add(() => {
         const t = performance.now() * 0.0002;
         moons.forEach((m, idx) => {
-          const radius = orbitRadius * 0.2 + idx * 0.8;
-          m.position.x = Math.cos(t + idx) * radius;
-          m.position.z = Math.sin(t + idx) * radius;
+          const baseRadius = orbitRadius * 0.08 + 0.025;
+          const baseSpeed = 1 + moonRand(idx + 2) * 1.5;
+          const axisArr = moonOrbitAxes[idx] || [0, 1, 0];
+          const axis = new Vector3(axisArr[0], axisArr[1], axisArr[2]).normalize();
+          let pos = new Vector3(
+            Math.cos(t * baseSpeed + idx) * baseRadius,
+            0,
+            Math.sin(t * baseSpeed + idx) * baseRadius
+          );
+          if (!(axis.x === 0 && axis.y === 1 && axis.z === 0)) {
+            const up = new Vector3(0, 1, 0);
+            const q = new Quaternion();
+            Quaternion.FromUnitVectorsToRef(up, axis, q);
+            const rotMat = Matrix.Identity();
+            q.toRotationMatrix(rotMat);
+            pos = Vector3.TransformCoordinates(pos, rotMat);
+          }
+          m.position = pos;
         });
-      });
-      _observers.push(obs);
+      }));
     }
 
-    // Click handling
     _mesh.actionManager = new ActionManager(_scene);
     _mesh.actionManager.registerAction(
-      new ExecuteCodeAction(ActionManager.OnPickTrigger, () => {
-        dispatch('select', { name });
-      })
+      new ExecuteCodeAction(ActionManager.OnPickTrigger, () => dispatch('select', { name }))
     );
   });
 
   onDestroy(() => {
-    // Remove all observers
-    if (_scene && _observers.length) {
-      _observers.forEach(obs => {
-        _scene.onBeforeRenderObservable.remove(obs);
-      });
-      _observers = [];
-    }
+    if (_scene && _observers.length) _observers.forEach(obs => _scene.onBeforeRenderObservable.remove(obs));
     if (_mesh) _mesh.dispose();
     moons.forEach(m => m.dispose());
   });

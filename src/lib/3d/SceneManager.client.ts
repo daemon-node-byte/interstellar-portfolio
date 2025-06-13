@@ -1,7 +1,7 @@
 import {
     Engine, Scene, ArcRotateCamera, Vector3, MeshBuilder,
-    Animation, CubicEase, Color4,
-    type Nullable, Observer, ShaderMaterial, ShadowGenerator, DirectionalLight, Matrix, Texture,
+    Animation, CubicEase, Color4, ShaderMaterial,
+    type Nullable, Observer, DirectionalLight, ShadowGenerator,
 } from '@babylonjs/core';
 import { getParticleSun } from './utils/particleSun';
 
@@ -16,10 +16,11 @@ export class SceneManager {
     private _resolveReady!: () => void;
     private _beforeRenderObserver: Nullable<Observer<Scene>> = null;
     private followObserver: Nullable<Observer<Scene>> = null;
-    private planetLights = new Map<string, { light: DirectionalLight, shadowGen: ShadowGenerator }>();
     private readonly defaultCameraTarget = Vector3.Zero();
     private readonly defaultCameraRadius = 40;
     private _resizeHandler = () => this.engine.resize();
+    private sunLight!: DirectionalLight;
+    private sunShadowGen!: ShadowGenerator;
 
     private constructor() {
         this.ready = new Promise(resolve => { this._resolveReady = resolve; });
@@ -52,16 +53,21 @@ export class SceneManager {
         // Sun and lighting
         const sunSphere = MeshBuilder.CreateSphere('Sun', { diameter: 4 }, this.scene);
         sunSphere.isVisible = false;
-        const sunLight = new DirectionalLight('SunLight', new Vector3(0, -1, 0), this.scene);
-        sunLight.position = Vector3.Zero();
-        sunLight.intensity = 1;
-        new ShadowGenerator(2048, sunLight).useExponentialShadowMap = true;
+        this.sunLight = new DirectionalLight('SunLight', new Vector3(0, -1, 0), this.scene);
+        this.sunLight.position = Vector3.Zero();
+        this.sunLight.intensity = 1;
+        this.sunShadowGen = new ShadowGenerator(2048, this.sunLight);
+        this.sunShadowGen.useExponentialShadowMap = true;
         getParticleSun(this.scene);
 
         this.engine.runRenderLoop(() => this.scene.render());
         window.addEventListener('resize', this._resizeHandler);
 
         this._resolveReady();
+    }
+
+    public getSunShadowGenerator(): ShadowGenerator { 
+        return this.sunShadowGen ??= new ShadowGenerator(2048, this.sunLight);
     }
 
     public registerBeforeRender(fn: BeforeRenderCallback): void {
@@ -153,34 +159,6 @@ export class SceneManager {
         starfieldMat.backFaceCulling = false;
         starfieldSphere.material = starfieldMat;
         starfieldSphere.renderingGroupId = 0;
-    }
-
-    public createPlanetLight(planetName: string, planetPosition: Vector3): void {
-        if (!this.scene || this.planetLights.has(planetName)) return;
-        const sunPos = this.scene.getMeshByName('Sun')?.position ?? Vector3.Zero();
-        const dir = planetPosition.subtract(sunPos).normalize();
-        const light = new DirectionalLight(`${planetName}-DirLight`, dir, this.scene);
-        light.position = sunPos.clone();
-        light.intensity = 200.0;
-        light.shadowMinZ = 50;
-        light.shadowMaxZ = 150;
-        const shadowGen = new ShadowGenerator(1024, light);
-        shadowGen.useExponentialShadowMap = true;
-        shadowGen.bias = 0.02;
-        this.planetLights.set(planetName, { light, shadowGen });
-    }
-
-    public getPlanetShadowGen(planetName: string): ShadowGenerator | undefined {
-        return this.planetLights.get(planetName)?.shadowGen;
-    }
-
-    public getPlanetLightMatrix(planetName: string): Matrix | undefined {
-        return this.planetLights.get(planetName)?.shadowGen.getTransformMatrix();
-    }
-
-    public getPlanetShadowMap(planetName: string): Texture | undefined {
-        const shadowMap = this.planetLights.get(planetName)?.shadowGen.getShadowMap();
-        return shadowMap === null ? undefined : shadowMap;
     }
 
     public dispose(): void {

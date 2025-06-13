@@ -9,6 +9,7 @@ import {
   SphereParticleEmitter,
   Vector3
 } from "@babylonjs/core";
+import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
 import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { ConeParticleEmitter } from "@babylonjs/core/Particles/EmitterTypes/coneParticleEmitter";
 
@@ -37,10 +38,24 @@ function getParticleSun(scene: Scene) {
 
   // Add a glow layer to the scene
   const glowLayer = new GlowLayer("sunGlow", scene, {
-    blurKernelSize: 64
+    blurKernelSize: 128
   });
   // Optionally, tweak intensity for the sun's core
-  glowLayer.intensity = 0.7;
+  glowLayer.intensity = 1.4;
+  glowLayer.addIncludedOnlyMesh(coreSphere);
+
+  const pipeline = new DefaultRenderingPipeline(
+    "defaultPipeline",
+    true,
+    scene,
+    scene.cameras
+  );
+
+  pipeline.bloomEnabled = true;
+  pipeline.bloomThreshold = 0.1; // Lower = more bloom
+  pipeline.bloomWeight = 0;    // Strength of bloom
+  pipeline.bloomKernel = 16;     // Blur size
+  pipeline.bloomScale = 0.1; 
 
   // Particle system (surface)
   const particles = new ParticleSystem("surfaceParticles", 1600, scene);
