@@ -68,20 +68,24 @@ const planetConfigs = [
 
 function onSelect(event: CustomEvent<{ name: string }>) {
 	selectedPlanetName = event.detail.name;
-	SceneManager.instance.followPlanet(selectedPlanetName);
-	selectedPlanet.set(selectedPlanetName);
+	if (typeof window !== 'undefined') {
+		SceneManager.instance.followPlanet(selectedPlanetName);
+		selectedPlanet.set(selectedPlanetName);
+	}
 }
 
 function handleKeydown(event: KeyboardEvent) {
 	if (event.key === 'Escape') {
 		selectedPlanetName = null;
-		SceneManager.instance.resetCamera();
-		selectedPlanet.set(null);
+		if (typeof window !== 'undefined') {
+			SceneManager.instance.resetCamera();
+			selectedPlanet.set(null);
+		}
 	}
 }
 
 onMount(async () => {
-	if (!canvasEl) return;
+	if (typeof window === 'undefined' || !canvasEl) return;
 	SceneManager.instance.init(canvasEl);
 	await SceneManager.instance.ready;
 	isSceneReady = true;
@@ -89,6 +93,7 @@ onMount(async () => {
 });
 
 onDestroy(() => {
+	if (typeof window === 'undefined') return;
 	SceneManager.instance.dispose();
 	window.removeEventListener('keydown', handleKeydown);
 });

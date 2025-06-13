@@ -9,9 +9,7 @@ import {
   SphereParticleEmitter,
   Vector3
 } from "@babylonjs/core";
-import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
-import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
-import { ConeParticleEmitter } from "@babylonjs/core/Particles/EmitterTypes/coneParticleEmitter";
+import { VolumetricLightScatteringPostProcess } from "@babylonjs/core/PostProcesses/volumetricLightScatteringPostProcess";
 
 function getParticleSun(scene: Scene) {
 
@@ -26,9 +24,9 @@ function getParticleSun(scene: Scene) {
 
   // Animate the core material's emissive color
   scene.registerBeforeRender(() => {
-    const t = performance.now() * 0.001;
+    // const t = performance.now() * 0.001;
     // Animate color intensity with a subtle pulsing effect
-    const intensity = 0.8 + 0.2 * Math.sin(t * 1.2);
+    const intensity = 0.8 + 0.2 * Math.sin(1.2);
     coreMat.emissiveColor = new Color3(
       0.3773 * intensity,
       0.093 * intensity,
@@ -36,26 +34,29 @@ function getParticleSun(scene: Scene) {
     );
   });
 
-  // Add a glow layer to the scene
-  const glowLayer = new GlowLayer("sunGlow", scene, {
-    blurKernelSize: 128
-  });
-  // Optionally, tweak intensity for the sun's core
-  glowLayer.intensity = 1.4;
-  glowLayer.addIncludedOnlyMesh(coreSphere);
-
-  const pipeline = new DefaultRenderingPipeline(
-    "defaultPipeline",
-    true,
-    scene,
-    scene.cameras
+  // --- Replace GlowLayer with Volumetric Light Scattering ---
+  // Remove GlowLayer, add VolumetricLightScatteringPostProcess for sun god rays
+  const sunVLS = new VolumetricLightScatteringPostProcess(
+    "sunVLS",
+    1.0,
+    scene.activeCamera,
+    coreSphere,
+    100,
+    Texture.BILINEAR_SAMPLINGMODE,
+    scene.getEngine(),
+    false
   );
-
-  pipeline.bloomEnabled = true;
-  pipeline.bloomThreshold = 0.1; // Lower = more bloom
-  pipeline.bloomWeight = 0;    // Strength of bloom
-  pipeline.bloomKernel = 16;     // Blur size
-  pipeline.bloomScale = 0.1; 
+  const sunVLSMat = new StandardMaterial("sunVLSMat", scene);
+  sunVLSMat.emissiveColor = new Color3(1, 0.6, 0.2);
+  sunVLSMat.diffuseColor = Color3.Black();
+  sunVLSMat.specularColor = Color3.Black();
+  sunVLS.mesh.material = sunVLSMat;
+  sunVLS.exposure = 0.25;
+  sunVLS.decay = 0.95;
+  sunVLS.weight = 0.8;
+  sunVLS.density = 0.85;
+  sunVLS.useCustomMeshPosition = true;
+  sunVLS.customMeshPosition = coreSphere.position;
 
   // Particle system (surface)
   const particles = new ParticleSystem("surfaceParticles", 1600, scene);
@@ -90,49 +91,49 @@ function getParticleSun(scene: Scene) {
   particles.start();
 
   // Solar flare particle system
-  const flareParticles = new ParticleSystem("solarFlares", 128, scene);
-  flareParticles.particleTexture = new Texture(
-    "/textures/SunFlare.png",
-    scene
-  );
-  flareParticles.emitter = coreSphere;
-  const flareEmitter = new ConeParticleEmitter(4, Math.PI / 16);
-  flareEmitter.radiusRange = 0.9;
-  flareParticles.particleEmitterType = flareEmitter;
+//   const flareParticles = new ParticleSystem("solarFlares", 128, scene);
+//   flareParticles.particleTexture = new Texture(
+//     "/textures/SunFlare.png",
+//     scene
+//   );
+//   flareParticles.emitter = coreSphere;
+//   const flareEmitter = new ConeParticleEmitter(4, Math.PI / 16);
+//   flareEmitter.radiusRange = 0.9;
+//   flareParticles.particleEmitterType = flareEmitter;
 
-  flareParticles.addColorGradient(0, new Color4(1, 0.7, 0.2, 0.7));
-  flareParticles.addColorGradient(0.5, new Color4(1, 0.4, 0.1, 0.5));
-  flareParticles.addColorGradient(1, new Color4(1, 0.1, 0, 0));
-  flareParticles.minSize = 0.7;
-  flareParticles.maxSize = 1.5;
-  flareParticles.minLifeTime = 1.5;
-  flareParticles.maxLifeTime = 2.5;
-  flareParticles.emitRate = 12;
-  flareParticles.blendMode = ParticleSystem.BLENDMODE_ADD;
-  flareParticles.gravity = Vector3.Zero();
-  flareParticles.minEmitPower = 3;
-  flareParticles.maxEmitPower = 6;
-  flareParticles.minAngularSpeed = -0.5;
-  flareParticles.maxAngularSpeed = 0.5;
-  flareParticles.updateSpeed = 0.01;
-  flareParticles.isBillboardBased = true;
-  flareParticles.minInitialRotation = 0;
-  flareParticles.maxInitialRotation = 2 * Math.PI;
+//   flareParticles.addColorGradient(0, new Color4(1, 0.7, 0.2, 0.7));
+//   flareParticles.addColorGradient(0.5, new Color4(1, 0.4, 0.1, 0.5));
+//   flareParticles.addColorGradient(1, new Color4(1, 0.1, 0, 0));
+//   flareParticles.minSize = 0.7;
+//   flareParticles.maxSize = 1.5;
+//   flareParticles.minLifeTime = 1.5;
+//   flareParticles.maxLifeTime = 2.5;
+//   flareParticles.emitRate = 12;
+//   flareParticles.blendMode = ParticleSystem.BLENDMODE_ADD;
+//   flareParticles.gravity = Vector3.Zero();
+//   flareParticles.minEmitPower = 3;
+//   flareParticles.maxEmitPower = 6;
+//   flareParticles.minAngularSpeed = -0.5;
+//   flareParticles.maxAngularSpeed = 0.5;
+//   flareParticles.updateSpeed = 0.01;
+//   flareParticles.isBillboardBased = true;
+//   flareParticles.minInitialRotation = 0;
+//   flareParticles.maxInitialRotation = 2 * Math.PI;
 
-// Animate flare emission direction for dynamic solar flare effect
-scene.registerBeforeRender(() => {
-  // const t = performance.now() * 0.0005;
-  // Slowly rotate the flare emission direction around the sun
-  // const angle = t * Math.PI * 2;
-  // BUG FIX: ConeParticleEmitter expects direction1 and direction2 to be Vector3s representing the *direction* of the cone axis,
-  // but the constructor's angle parameter sets the spread. The direction should be a normalized vector, not a point on the sphere.
-  // The bug was using a changing direction for both direction1 and direction2, which disables the cone spread.
-  // Instead, set direction1 and direction2 to be opposite vectors to define the cone's axis and spread.
+// // Animate flare emission direction for dynamic solar flare effect
+// scene.registerBeforeRender(() => {
+//   // const t = performance.now() * 0.0005;
+//   // Slowly rotate the flare emission direction around the sun
+//   // const angle = t * Math.PI * 2;
+//   // BUG FIX: ConeParticleEmitter expects direction1 and direction2 to be Vector3s representing the *direction* of the cone axis,
+//   // but the constructor's angle parameter sets the spread. The direction should be a normalized vector, not a point on the sphere.
+//   // The bug was using a changing direction for both direction1 and direction2, which disables the cone spread.
+//   // Instead, set direction1 and direction2 to be opposite vectors to define the cone's axis and spread.
 
-  flareEmitter.directionRandomizer = 0.5; // Randomize direction slightly
-  // Animate both direction1 and direction2 for dynamic solar flare effect
-});
-  flareParticles.start();
+//   flareEmitter.directionRandomizer = 0.5; // Randomize direction slightly
+//   // Animate both direction1 and direction2 for dynamic solar flare effect
+// });
+//   flareParticles.start();
 
   return scene;
 }

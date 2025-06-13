@@ -58,7 +58,7 @@ export class SceneManager {
         this.sunLight.intensity = 1;
         this.sunShadowGen = new ShadowGenerator(2048, this.sunLight);
         this.sunShadowGen.useExponentialShadowMap = true;
-        getParticleSun(this.scene);
+        getParticleSun(this.scene); // Now uses volumetric light scattering for sun
 
         this.engine.runRenderLoop(() => this.scene.render());
         window.addEventListener('resize', this._resizeHandler);
