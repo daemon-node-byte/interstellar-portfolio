@@ -4,6 +4,8 @@ import { SceneManager } from '$lib/3d/SceneManager.client';
 import Planet from '$lib/components/Planet.svelte';
 import { selectedPlanet } from '$lib/store';
 
+
+
 let canvasEl: HTMLCanvasElement;
 let isSceneReady = false;
 let selectedPlanetName: string | null = null;
@@ -85,11 +87,16 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 onMount(async () => {
-	if (typeof window === 'undefined' || !canvasEl) return;
+	
+
 	SceneManager.instance.init(canvasEl);
 	await SceneManager.instance.ready;
 	isSceneReady = true;
-	window.addEventListener('keydown', handleKeydown);
+	if (typeof window === 'undefined' || !canvasEl) return;
+	const {Inspector} = await import('@babylonjs/inspector');
+		if (SceneManager.instance.scene) {
+			Inspector.Show(SceneManager.instance.scene, { showExplorer: true, showInspector: true, overlay: true, });
+		}
 });
 
 onDestroy(() => {

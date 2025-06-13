@@ -11,8 +11,8 @@ varying vec3 vPlanetPosition;
 varying float vPlanetRadius;
 
 uniform sampler2D shadowMap;
-
-const vec3 sunDir = normalize(vec3(0.7, 0.8, 0.3));
+uniform vec3 sunDir;
+uniform vec3 sunPosition;
 
 // Classic 2D noise
 float hash(vec2 p) {
@@ -59,14 +59,14 @@ float getShadow(vec4 shadowCoord) {
 }
 
 // Returns 1.0 if in shadow, 0.0 if not
-float planetEclipse(vec3 fragPos, vec3 planetPos, float planetRadius, vec3 sunDir) {
-  // Vector from planet to fragment
-  vec3 toFrag = fragPos - planetPos;
-  // Project toFrag onto sunDir
-  float proj = dot(toFrag, sunDir);
-  if (proj < 0.0) return 0.0; // fragment is behind planet relative to sun
-  // Closest approach from sun ray to planet center
-  float dist2 = dot(toFrag, toFrag) - proj * proj;
+float planetEclipse(vec3 fragPos, vec3 planetPos, float planetRadius, vec3 sunPos) {
+  vec3 sunToFrag = fragPos - sunPos;
+  float fragDist = length(sunToFrag);
+  vec3 sunToPlanet = planetPos - sunPos;
+  float proj = dot(sunToPlanet, normalize(sunToFrag));
+  if (proj < 0.0 || proj > fragDist) return 0.0;
+  vec3 closest = sunPos + normalize(sunToFrag) * proj;
+  float dist2 = dot(planetPos - closest, planetPos - closest);
   float r2 = planetRadius * planetRadius;
   return dist2 < r2 ? 1.0 : 0.0;
 }
@@ -79,15 +79,17 @@ void main() {
   baseColor *= mix(0.8, 1.2, crater);
 
   // lighting
-  float light = dot(normalize(vNormal), sunDir) * 0.5 + 0.5;
-  baseColor *= light;
+  vec3 n = normalize(vNormal);
+  vec3 l = normalize(sunDir);
+  float light = max(dot(n, l), 0.0);
+  baseColor *= 0.5 + 0.5 * light;
 
   // shadow
   float shadow = getShadow(vShadowCoord);
   baseColor *= shadow;
 
-  float eclipse = planetEclipse(vWorldPos, vPlanetPosition, vPlanetRadius, sunDir);
-if (eclipse > 0.5) discard; // or: baseColor *= 0.2; // fully shadowed
+  float eclipse = planetEclipse(vWorldPos, vPlanetPosition, vPlanetRadius, sunPosition);
+  if (eclipse > 0.5) baseColor *= 0.2; // darken instead of discard
 
   gl_FragColor = vec4(baseColor, 1.0);
 }

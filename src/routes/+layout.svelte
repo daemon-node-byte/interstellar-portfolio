@@ -1,13 +1,15 @@
 <script lang="ts">
 	import '../app.css';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 
 	import SceneCanvas from '$lib/components/SceneCanvas.svelte';
 	import HUD from '$lib/components/HUD.svelte';
 	import { selectedPlanet } from '$lib/store';
 	import { SceneManager } from '$lib/3d/SceneManager.client';
-
+	onMount(async () => {
+	
+	})
 	let { children } = $props();
 
 	// Subscribe to store changes
@@ -22,6 +24,7 @@
 	});
 
 	onDestroy(unsubscribe);
+	
 </script>
 
 <!-- 3D canvas -->

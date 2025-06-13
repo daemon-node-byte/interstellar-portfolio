@@ -55,6 +55,26 @@ uniform mat4 lightMatrix;
 uniform sampler2D ringShadowMap;
 uniform mat4 ringLightMatrix;
 
+// Eclipse uniforms
+#define MAX_MOONS 4
+uniform int moonCount;
+uniform vec3 moonPositions[MAX_MOONS];
+uniform float moonRadii[MAX_MOONS];
+
+// Returns 1.0 if in shadow, 0.0 if not
+float moonEclipse(vec3 fragPos, vec3 moonPos, float moonRadius, vec3 sunPos) {
+  vec3 sunToFrag = fragPos - sunPos;
+  float fragDist = length(sunToFrag);
+  vec3 sunToMoon = moonPos - sunPos;
+  float proj = dot(sunToMoon, normalize(sunToFrag));
+  // Moon must be between sun and fragment
+  if (proj < 0.0 || proj > fragDist) return 0.0;
+  // Closest approach from moon to sun-fragment line
+  vec3 closest = sunPos + normalize(sunToFrag) * proj;
+  float dist2 = dot(moonPos - closest, moonPos - closest);
+  float r2 = moonRadius * moonRadius;
+  return dist2 < r2 ? 1.0 : 0.0;
+}
 
 void main() {
   // Base color zones via uv.y (latitude)
@@ -98,6 +118,17 @@ void main() {
   }
 
   color *= light * shadow * ringShadow;
+
+  // --- Moon eclipse (shadow) ---
+  float eclipseShadow = 1.0;
+  for (int i = 0; i < MAX_MOONS; i++) {
+    if (i >= moonCount) break;
+    if (moonEclipse(vWorldPos, moonPositions[i], moonRadii[i], sunPosition) > 0.5) {
+      eclipseShadow = 0.2; // darken, not discard
+      break;
+    }
+  }
+  color *= eclipseShadow;
 
   gl_FragColor = vec4(color, 1.0);
 }

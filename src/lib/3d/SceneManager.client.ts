@@ -3,6 +3,7 @@ import {
     Animation, CubicEase, Color4, ShaderMaterial,
     type Nullable, Observer, DirectionalLight, ShadowGenerator,
 } from '@babylonjs/core';
+
 import { getParticleSun } from './entities/particleSun';
 import { createComet } from './entities/createComet';
 
@@ -33,7 +34,7 @@ export class SceneManager {
 
     public init(canvas: HTMLCanvasElement): void {
         if (typeof window === 'undefined' || !canvas) return;
-
+        
         this.engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: true });
         this.scene = new Scene(this.engine);
         this.scene.clearColor = new Color4(0.02, 0.02, 0.07, 1);
@@ -168,4 +169,5 @@ export class SceneManager {
         this.scene.dispose();
         this.engine.dispose();
     }
+ 
 }

@@ -1,1 +1,1 @@
-<div>Blog</div>
+<div></div>

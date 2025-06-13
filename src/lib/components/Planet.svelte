@@ -36,6 +36,11 @@
     _scene = SceneManager.instance.scene;
     const sunShadowGen = SceneManager.instance.getSunShadowGenerator();
 
+    const getSunPosition = () => {
+    // Sun is always at (0,0,0) in your setup, but use this for flexibility
+    return SceneManager.instance.scene.getMeshByName('Sun')?.getAbsolutePosition() ?? new Vector3(0, 0, 0);
+  };
+
     // Planet
     _mesh = MeshBuilder.CreateSphere(name, { diameter: planetSize, segments: 64 }, _scene);
     const surfMat = new ShaderMaterial(`${name}-surfMat`, _scene, '/Shaders/planet', {
@@ -61,6 +66,13 @@
       setShadowUniforms(surfMat, sunShadowGen);
     }
 
+    // --- Add eclipse uniforms ---
+    surfMat.setInt('moonCount', moonCount);
+    for (let i = 0; i < 4; i++) {
+      surfMat.setVector3(`moonPositions[${i}]`, { x: 0, y: 0, z: 0 });
+      surfMat.setFloat(`moonRadii[${i}]`, 0.0);
+    }
+
     _observers.push(_scene.onBeforeRenderObservable.add(() => {
       const now = performance.now();
       surfMat.setFloat('time', now * 0.001);
@@ -68,6 +80,18 @@
       _mesh.position.x = Math.cos(t) * orbitRadius;
       _mesh.position.z = Math.sin(t) * orbitRadius;
       surfMat.setMatrix('world', _mesh.getWorldMatrix());
+      // --- Update eclipse uniforms each frame ---
+      surfMat.setInt('moonCount', moonCount);
+      for (let i = 0; i < 4; i++) {
+        if (i < moons.length) {
+          const moonAbs = moons[i].getAbsolutePosition();
+          surfMat.setVector3(`moonPositions[${i}]`, { x: moonAbs.x, y: moonAbs.y, z: moonAbs.z });
+          surfMat.setFloat(`moonRadii[${i}]`, moons[i].getBoundingInfo().boundingSphere.radius);
+        } else {
+          surfMat.setVector3(`moonPositions[${i}]`, { x: 0, y: 0, z: 0 });
+          surfMat.setFloat(`moonRadii[${i}]`, 0.0);
+        }
+      }
     }));
 
     // Ring
@@ -107,7 +131,13 @@
       atmoMat.setVector3('atmoColor', { x: atmoColor[0], y: atmoColor[1], z: atmoColor[2] });
       atmoMat.setFloat('coef', 0.1);
       atmoMat.setFloat('power', 2.0);
+      atmoSphere.actionManager = new ActionManager(_scene);
+  atmoSphere.actionManager.registerAction(
+    new ExecuteCodeAction(ActionManager.OnPickTrigger, () => dispatch('select', { name }))
+  );
     }
+
+    
 
     // Moons
     for (let i = 0; i < moonCount; i++) {
@@ -118,10 +148,12 @@
       }
       const moonMat = new ShaderMaterial(`${name}-moonMat-${i}`, _scene, '/Shaders/moon', {
         attributes: ['position', 'uv', 'normal'],
-        uniforms: ['worldViewProjection', 'time', 'world', 'shadowMap', 'lightMatrix', 'planetPosition', 'planetRadius']
+        uniforms: ['worldViewProjection', 'time', 'world', 'shadowMap', 'lightMatrix', 'planetPosition', 'planetRadius', 'sunDir', 'sunPosition']
       });
       moonMat.setVector3('planetPosition', _mesh.position);
-      moonMat.setFloat('planetRadius', planetSize * 0.5); // radius = diameter / 2
+      moonMat.setFloat('planetRadius', planetSize * 0.5);
+      moonMat.setVector3('sunDir', {x: 0, y: -1, z: 0});
+      moonMat.setVector3('sunPosition', getSunPosition());
       moonMat.backFaceCulling = false;
       m.material = moonMat;
       setShadowUniforms(moonMat, sunShadowGen);
@@ -130,6 +162,7 @@
     if (moonCount > 0) {
       _observers.push(_scene.onBeforeRenderObservable.add(() => {
         const t = performance.now() * 0.0002;
+        const sunPos = getSunPosition();
         moons.forEach((m, idx) => {
           const baseRadius = orbitRadius * 0.08 + 0.025;
           const baseSpeed = 1 + moonRand(idx + 2) * 1.5;
@@ -153,8 +186,11 @@
             mat.setMatrix('world', m.getWorldMatrix());
             mat.setVector3('planetPosition', _mesh.position);
             mat.setFloat('planetRadius', planetSize * 0.5);
+            const moonWorldPos = m.getAbsolutePosition();
+            const sunDir = sunPos.subtract(moonWorldPos).normalize();
+            mat.setVector3('sunDir', sunDir);
+            mat.setVector3('sunPosition', sunPos);
           }
-
         });
       }));
     }
