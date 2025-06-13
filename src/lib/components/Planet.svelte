@@ -1,76 +1,52 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import {
-    MeshBuilder,
-    StandardMaterial,
-    Color3,
-    Mesh,
-    Scene,
-    Observer,
-    ActionManager,
-    ExecuteCodeAction,
-    DirectionalLight,
-    Vector3,
-    Matrix,
-    Quaternion
+    MeshBuilder, Mesh, Scene, Observer, ActionManager, ExecuteCodeAction, Vector3, Matrix, Quaternion
   } from '@babylonjs/core';
   import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
-  import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
   import { SceneManager } from '$lib/3d/SceneManager.client';
 
   export let name: string;
-  export let planetSize = 2.0;
-  export let orbitRadius = 10;
-  export let speed = 1;
-  export let hasRing = false;
-  export let ringDiameter = 2.2;
-  export let ringThickness = 3.0;
-  export let ringColor = [0.8, 0.8, 0.2];
-  export let ringRotation = [Math.PI / 4, 0, 0];
-  export let ringOuter = 2.5;
-  export let ringInner = 1.5;
-  export let moonCount = 0;
-  export let atmosphere = false;
-  export let atmoColor = [0.2, 0.6, 1.0];
-  export let equatorColor = [0.2, 0.5, 0.8];
-  export let midColor = [0.1, 0.3, 0.1];
-  export let poleColor = [0.8, 0.8, 0.9];
-  export let noiseScale = 5.0;
-  export let noiseSpeed = 0.05;
-  export let detailMix = 0.5;
-  export let moonOrbitAxes: Array<[number, number, number]> = [];
+  export let planetSize = 2.0, orbitRadius = 10, speed = 1;
+  export let hasRing = false, ringDiameter = 2.2, ringThickness = 3.0, ringColor = [0.8, 0.8, 0.2], ringRotation = [Math.PI / 4, 0, 0], ringOuter = 2.5, ringInner = 1.5;
+  export let moonCount = 0, moonOrbitAxes: Array<[number, number, number]> = [];
+  export let atmosphere = false, atmoColor = [0.2, 0.6, 1.0];
+  export let equatorColor = [0.2, 0.5, 0.8], midColor = [0.1, 0.3, 0.1], poleColor = [0.8, 0.8, 0.9];
+  export let noiseScale = 5.0, noiseSpeed = 0.05, detailMix = 0.5;
 
   const dispatch = createEventDispatcher();
   let _scene: Scene, _mesh: Mesh, ring: Mesh;
   const moons: Mesh[] = [];
   let _observers: Observer<Scene>[] = [];
 
-  // Helper to generate a pseudo-random value per moon (deterministic per planet)
   function moonRand(seed: number) {
-    // Simple LCG for deterministic pseudo-random
     return Math.sin(seed * 999 + name.length * 17) * 10000 % 1;
+  }
+
+  function setShadowUniforms(mat: ShaderMaterial, sunShadowGen: any) {
+    if (!sunShadowGen) return;
+    const shadowMap = sunShadowGen.getShadowMap();
+    if (shadowMap) mat.setTexture('shadowMap', shadowMap);
+    mat.setMatrix('lightMatrix', sunShadowGen.getTransformMatrix());
   }
 
   onMount(async () => {
     if (typeof window === 'undefined') return;
     await SceneManager.instance.ready;
     _scene = SceneManager.instance.scene;
-
-    // Create planet mesh and shader material
-    _mesh = MeshBuilder.CreateSphere(name, { diameter: planetSize, segments: 64 }, _scene);
     const sunShadowGen = SceneManager.instance.getSunShadowGenerator();
-    const surfMat = new ShaderMaterial(
-      `${name}-surfMat`, _scene, '/Shaders/planet',
-      {
-        attributes: ['position', 'uv', 'normal'],
-        uniforms: [
-          'worldViewProjection', 'world', 'time',
-          'equatorColor', 'midColor', 'poleColor',
-          'noiseScale', 'noiseSpeed', 'detailMix', 'sunPosition',
-          'shadowMap', 'lightMatrix'
-        ]
-      }
-    );
+
+    // Planet
+    _mesh = MeshBuilder.CreateSphere(name, { diameter: planetSize, segments: 64 }, _scene);
+    const surfMat = new ShaderMaterial(`${name}-surfMat`, _scene, '/Shaders/planet', {
+      attributes: ['position', 'uv', 'normal'],
+      uniforms: [
+        'worldViewProjection', 'world', 'time',
+        'equatorColor', 'midColor', 'poleColor',
+        'noiseScale', 'noiseSpeed', 'detailMix', 'sunPosition',
+        'shadowMap', 'lightMatrix'
+      ]
+    });
     surfMat.backFaceCulling = false;
     surfMat.setVector3('equatorColor', { x: equatorColor[0], y: equatorColor[1], z: equatorColor[2] });
     surfMat.setVector3('midColor', { x: midColor[0], y: midColor[1], z: midColor[2] });
@@ -79,13 +55,10 @@
     surfMat.setFloat('noiseSpeed', noiseSpeed);
     surfMat.setFloat('detailMix', detailMix);
     _mesh.material = surfMat;
-
     if (sunShadowGen) {
       sunShadowGen.addShadowCaster(_mesh, true);
       _mesh.receiveShadows = true;
-      const shadowMap = sunShadowGen.getShadowMap();
-      if (shadowMap) surfMat.setTexture('shadowMap', shadowMap);
-      surfMat.setMatrix('lightMatrix', sunShadowGen.getTransformMatrix());
+      setShadowUniforms(surfMat, sunShadowGen);
     }
 
     _observers.push(_scene.onBeforeRenderObservable.add(() => {
@@ -97,46 +70,33 @@
       surfMat.setMatrix('world', _mesh.getWorldMatrix());
     }));
 
+    // Ring
     if (hasRing) {
-      ring = MeshBuilder.CreateTorus(
-        `${name}-ring`,
-        { diameter: planetSize + ringDiameter, thickness: ringThickness, tessellation: 64 },
-        _scene
-      );
+      ring = MeshBuilder.CreateTorus(`${name}-ring`, { diameter: planetSize + ringDiameter, thickness: ringThickness, tessellation: 64 }, _scene);
       if (sunShadowGen) {
         sunShadowGen.addShadowCaster(ring, true);
         ring.receiveShadows = true;
       }
-      ring.rotation.x = ringRotation[0];
-      ring.rotation.y = ringRotation[1];
-      ring.rotation.z = ringRotation[2];
+      [ring.rotation.x, ring.rotation.y, ring.rotation.z] = ringRotation;
       const ringMat = new ShaderMaterial(`${name}-ringMat`, _scene, '/Shaders/ring', {
         attributes: ['position', 'uv'],
-        uniforms: [
-          'worldViewProjection', 'color', 'outerRadius', 'innerRadius',
-          'sunPosition', 'shadowMap', 'lightMatrix'
-        ]
+        uniforms: ['worldViewProjection', 'color', 'outerRadius', 'innerRadius', 'sunPosition', 'shadowMap', 'lightMatrix']
       });
       ringMat.setVector3('color', { x: ringColor[0], y: ringColor[1], z: ringColor[2] });
       ringMat.setFloat('outerRadius', ringOuter);
       ringMat.setFloat('innerRadius', ringInner);
       ring.material = ringMat;
       ring.parent = _mesh;
-      if (sunShadowGen) {
-        const shadowMap = sunShadowGen.getShadowMap();
-        if (shadowMap) ringMat.setTexture('shadowMap', shadowMap);
-        ringMat.setMatrix('lightMatrix', sunShadowGen.getTransformMatrix());
-      }
+      setShadowUniforms(ringMat, sunShadowGen);
     }
 
+    // Atmosphere
     if (atmosphere) {
-      const atmoSphere = MeshBuilder.CreateSphere(
-        `${name}-atmo`, { diameter: planetSize + 0.15, segments: 32 }, _scene
-      );
-      const atmoMat = new ShaderMaterial(
-        `${name}-atmoMat`, _scene, '/Shaders/atmo',
-        { attributes: ['position'], uniforms: ['worldViewProjection', 'cameraPosition', 'atmoColor', 'coef', 'power'] }
-      );
+      const atmoSphere = MeshBuilder.CreateSphere(`${name}-atmo`, { diameter: planetSize + 0.15, segments: 32 }, _scene);
+      const atmoMat = new ShaderMaterial(`${name}-atmoMat`, _scene, '/Shaders/atmo', {
+        attributes: ['position'],
+        uniforms: ['worldViewProjection', 'cameraPosition', 'atmoColor', 'coef', 'power']
+      });
       atmoMat.backFaceCulling = true;
       atmoMat.alpha = 0.5;
       atmoSphere.material = atmoMat;
@@ -149,16 +109,22 @@
       atmoMat.setFloat('power', 2.0);
     }
 
+    // Moons
     for (let i = 0; i < moonCount; i++) {
-      const m = MeshBuilder.CreateSphere(`${name}-moon-${i}`, { diameter: 0.4 }, _scene);
+      const m = MeshBuilder.CreateSphere(`${name}-moon-${i}`, { diameter: 0.4, segments: 32 }, _scene);
       if (sunShadowGen) {
         sunShadowGen.addShadowCaster(m, true);
         m.receiveShadows = true;
       }
-      const mat = new StandardMaterial(`${name}-moonMat-${i}`, _scene);
-      mat.diffuseColor = new Color3(0.8, 0.8, 0.8);
-      m.material = mat;
-      m.parent = _mesh;
+      const moonMat = new ShaderMaterial(`${name}-moonMat-${i}`, _scene, '/Shaders/moon', {
+        attributes: ['position', 'uv', 'normal'],
+        uniforms: ['worldViewProjection', 'time', 'world', 'shadowMap', 'lightMatrix', 'planetPosition', 'planetRadius']
+      });
+      moonMat.setVector3('planetPosition', _mesh.position);
+      moonMat.setFloat('planetRadius', planetSize * 0.5); // radius = diameter / 2
+      moonMat.backFaceCulling = false;
+      m.material = moonMat;
+      setShadowUniforms(moonMat, sunShadowGen);
       moons.push(m);
     }
     if (moonCount > 0) {
@@ -169,11 +135,7 @@
           const baseSpeed = 1 + moonRand(idx + 2) * 1.5;
           const axisArr = moonOrbitAxes[idx] || [0, 1, 0];
           const axis = new Vector3(axisArr[0], axisArr[1], axisArr[2]).normalize();
-          let pos = new Vector3(
-            Math.cos(t * baseSpeed + idx) * baseRadius,
-            0,
-            Math.sin(t * baseSpeed + idx) * baseRadius
-          );
+          let pos = new Vector3(Math.cos(t * baseSpeed + idx) * baseRadius, 0, Math.sin(t * baseSpeed + idx) * baseRadius);
           if (!(axis.x === 0 && axis.y === 1 && axis.z === 0)) {
             const up = new Vector3(0, 1, 0);
             const q = new Quaternion();
@@ -182,7 +144,17 @@
             q.toRotationMatrix(rotMat);
             pos = Vector3.TransformCoordinates(pos, rotMat);
           }
+          m.parent = _mesh;
           m.position = pos;
+          const mat = m.material as ShaderMaterial;
+
+          if (mat) {
+            mat.setFloat('time', performance.now() * 0.001);
+            mat.setMatrix('world', m.getWorldMatrix());
+            mat.setVector3('planetPosition', _mesh.position);
+            mat.setFloat('planetRadius', planetSize * 0.5);
+          }
+
         });
       }));
     }

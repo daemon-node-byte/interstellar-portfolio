@@ -3,7 +3,8 @@ import {
     Animation, CubicEase, Color4, ShaderMaterial,
     type Nullable, Observer, DirectionalLight, ShadowGenerator,
 } from '@babylonjs/core';
-import { getParticleSun } from './utils/particleSun';
+import { getParticleSun } from './entities/particleSun';
+import { createComet } from './entities/createComet';
 
 export type BeforeRenderCallback = (scene: Scene) => void;
 
@@ -59,7 +60,7 @@ export class SceneManager {
         this.sunShadowGen = new ShadowGenerator(2048, this.sunLight);
         this.sunShadowGen.useExponentialShadowMap = true;
         getParticleSun(this.scene); // Now uses volumetric light scattering for sun
-
+        createComet(this.scene, this.getSunPosition());
         this.engine.runRenderLoop(() => this.scene.render());
         window.addEventListener('resize', this._resizeHandler);
 
