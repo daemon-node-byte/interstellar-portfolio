@@ -2,7 +2,10 @@
 import { onMount, onDestroy } from 'svelte';
 import { SceneManager } from '$lib/3d/SceneManager.client';
 import Planet from '$lib/components/Planet.svelte';
+import PlanetLabel from '$lib/components/PlanetLabel.svelte';
 import { selectedPlanet } from '$lib/store';
+import { get } from 'svelte/store';
+import { planetLabels } from '$lib/store/planetLabels';
 
 
 
@@ -24,7 +27,7 @@ const planetConfigs = [
 		detailMix: 0.5
 	},
 	{
-		name: 'projects',
+		name: 'blog',
 		orbitRadius: 22,
     atmosphere: true,
 		speed: 0.4,
@@ -36,7 +39,7 @@ const planetConfigs = [
 		detailMix: 0.7
 	},
 	{
-		name: 'blog',
+		name: 'projects',
 		orbitRadius: 30,
     planetSize: 2.5,
     moonCount: 2,
@@ -104,6 +107,18 @@ onDestroy(() => {
 	SceneManager.instance.dispose();
 	window.removeEventListener('keydown', handleKeydown);
 });
+
+// Helper to get world position for a planet
+function getPlanetWorldPosition(name: string): () => [number, number, number] {
+  return () => {
+	const mesh = SceneManager.instance.scene.getMeshByName(name);
+	if (mesh) {
+	  const pos = mesh.getAbsolutePosition();
+	  return [pos.x, pos.y, pos.z] as [number, number, number];
+	}
+	return [0, 0, 0] as [number, number, number];
+  };
+}
 </script>
 
 <style>
@@ -135,7 +150,8 @@ canvas {
 </div>
 
 {#if isSceneReady}
-	{#each planetConfigs as cfg}
-		<Planet {...cfg} on:select={onSelect} />
-	{/each}
+  {#each planetConfigs as cfg}
+    <Planet {...cfg} on:select={onSelect} />
+    <PlanetLabel name={cfg.name} getWorldPosition={getPlanetWorldPosition(cfg.name)} visible={$planetLabels} />
+  {/each}
 {/if}
