@@ -32,12 +32,24 @@ float fbm(vec2 p) {
   float v = 0.0;
   float amp = 0.5;
   mat2 m = mat2(1.6,  1.2, -1.2,  1.6);
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 8; i++) { // Increased from 5 to 8 for finer detail
     v += amp * noise(p);
     p = m * p;
     amp *= 0.5;
   }
   return v;
+}
+
+// Add crater-like surface features
+float crater(vec2 uv, float scale, float t) {
+  float c = 0.0;
+  for (int i = 0; i < 8; i++) {
+    vec2 pos = uv * scale + float(i) * 10.0 + t * 0.05;
+    float n = noise(pos);
+    c += pow(smoothstep(0.7, 1.0, n), 8.0) * 0.5;
+    scale *= 1.3;
+  }
+  return c;
 }
 
 // Uniforms for per-planet appearance
@@ -85,9 +97,10 @@ void main() {
   float n1 = fbm(vUV * noiseScale + vTime * noiseSpeed);
   float n2 = fbm((vUV + 10.0) * (noiseScale * 4.0) - vTime * (noiseSpeed * 2.0));
   float detail = mix(n1, n2, detailMix);
-
-  // Combine base + detail
+  float craters = crater(vUV, noiseScale * 2.0, vTime);
+  // Combine base + detail + craters
   vec3 color = mix(base * 0.8, base * 1.2, detail);
+  color = mix(color, color * 0.5, craters * 0.7); // Darken where craters are
 
   // Simple lighting: lambert
   vec3 lightDir = normalize(sunPosition - vWorldPos);

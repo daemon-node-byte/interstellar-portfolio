@@ -23,6 +23,7 @@ export class SceneManager {
     private _resizeHandler = () => this.engine.resize();
     private sunLight!: DirectionalLight;
     private sunShadowGen!: ShadowGenerator;
+    private rotatingBodies: { meshName: string, speed: number, axis?: Vector3 }[] = [];
 
     private constructor() {
         this.ready = new Promise(resolve => { this._resolveReady = resolve; });
@@ -63,6 +64,15 @@ export class SceneManager {
         getParticleSun(this.scene); // Now uses volumetric light scattering for sun
         createComet(this.scene, this.getSunPosition());
         this.engine.runRenderLoop(() => this.scene.render());
+        // Register axis rotation for all rotating bodies
+        this.scene.registerBeforeRender(() => {
+            for (const body of this.rotatingBodies) {
+                const mesh = this.scene.getMeshByName(body.meshName);
+                if (mesh && body.axis) {
+                    mesh.rotate(body.axis, body.speed * this.engine.getDeltaTime() * 0.001);
+                }
+            }
+        });
         window.addEventListener('resize', this._resizeHandler);
 
         this._resolveReady();
@@ -175,4 +185,14 @@ export class SceneManager {
     public async waitUntilReady(): Promise<void> {
         await this.ready;
     }
+
+    public registerRotatingBody(meshName: string, speed: number, axis?: Vector3): void {
+        this.rotatingBodies.push({ meshName, speed, axis: axis ?? Vector3.Up() });
+    }
 }
+
+// Example usage: register axis rotation for sun, planets, moons
+// In your scene setup after mesh creation:
+// SceneManager.instance.registerRotatingBody('Earth', 0.2); // 0.2 rad/s
+// SceneManager.instance.registerRotatingBody('Moon', 0.5, new Vector3(0.3, 1, 0).normalize());
+// SceneManager.instance.registerRotatingBody('coreSphere', 0.1); // For the sun

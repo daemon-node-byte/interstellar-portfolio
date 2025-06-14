@@ -42,7 +42,7 @@
   };
 
     // Planet
-    _mesh = MeshBuilder.CreateSphere(name, { diameter: planetSize, segments: 64 }, _scene);
+    _mesh = MeshBuilder.CreateSphere(name, { diameter: planetSize, segments: 128 }, _scene); // Increased segments for more detail
     const surfMat = new ShaderMaterial(`${name}-surfMat`, _scene, '/Shaders/planet', {
       attributes: ['position', 'uv', 'normal'],
       uniforms: [
@@ -56,9 +56,9 @@
     surfMat.setVector3('equatorColor', { x: equatorColor[0], y: equatorColor[1], z: equatorColor[2] });
     surfMat.setVector3('midColor', { x: midColor[0], y: midColor[1], z: midColor[2] });
     surfMat.setVector3('poleColor', { x: poleColor[0], y: poleColor[1], z: poleColor[2] });
-    surfMat.setFloat('noiseScale', noiseScale);
-    surfMat.setFloat('noiseSpeed', noiseSpeed);
-    surfMat.setFloat('detailMix', detailMix);
+    surfMat.setFloat('noiseScale', noiseScale * 2.5); // More surface detail
+    surfMat.setFloat('noiseSpeed', noiseSpeed * 1.2);
+    surfMat.setFloat('detailMix', Math.min(1, detailMix + 0.2)); // More contrast
     _mesh.material = surfMat;
     if (sunShadowGen) {
       sunShadowGen.addShadowCaster(_mesh, true);
@@ -148,7 +148,8 @@
       }
       const moonMat = new ShaderMaterial(`${name}-moonMat-${i}`, _scene, '/Shaders/moon', {
         attributes: ['position', 'uv', 'normal'],
-        uniforms: ['worldViewProjection', 'time', 'world', 'shadowMap', 'lightMatrix', 'planetPosition', 'planetRadius', 'sunDir', 'sunPosition']
+        uniforms: ['worldViewProjection', 'time', 'world', 'shadowMap', 'lightMatrix', 'planetPosition', 'planetRadius', 'sunDir', 'sunPosition'
+        ]
       });
       moonMat.setVector3('planetPosition', _mesh.position);
       moonMat.setFloat('planetRadius', planetSize * 0.5);
